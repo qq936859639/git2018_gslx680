@@ -105,7 +105,7 @@ struct fw_config_type
 	unsigned int data_size;
 };
 static struct fw_config_type gsl_cfg_table[9] = {
-/*0*/{GSLX680_FW,(sizeof(GSLX680_FW)/sizeof(struct fw_data)),gsl_config_data_id,(sizeof(gsl_config_data_id)/4)},
+/*0*/{GSLX680_FW,(sizeof(GSLX680_FW)/sizeof(struct fw_data)),gsl_config_data_id,(sizeof(gsl_config_data_id)/sizeof(unsigned int))},
 /*1*///{GSLX68X_FW_ZHENGHAI,(sizeof(GSLX68X_FW_ZHENGHAI)/sizeof(struct fw_data)),gsl_config_data_id_zhenghai,(sizeof(gsl_config_data_id_zhenghai)/4)},
 /*2*///{GSLX68X_FW_DUNZHENG,(sizeof(GSLX68X_FW_DUNZHENG)/sizeof(struct fw_data)),gsl_config_data_id_denzheng,(sizeof(gsl_config_data_id_denzheng)/4)},
 };

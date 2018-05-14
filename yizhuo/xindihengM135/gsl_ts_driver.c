@@ -238,7 +238,7 @@ unsigned int gsl_model_extern[]={
 #include <linux/ioctl.h>
 static u8 tpd_proximity_flag = 0; //flag whether start alps
 static u8 tpd_proximity_detect = 1;//0-->close ; 1--> far away
-//static struct wake_lock ps_lock;
+static struct wake_lock ps_lock;
 //static u8 gsl_psensor_data[8]={0};
 extern int ps_flush_report(void);
 static int ps_flush(void);
@@ -450,7 +450,7 @@ s32 gsl_write_interface(struct i2c_client *client, u8 reg, u8 *buf, u32 num)
 static int gsl_write_interface(struct i2c_client *client,
         const u8 reg, u8 *buf, u32 num)
 {
-	struct i2c_msg xfer_msg[1]= {{0}};//modify crystal
+	struct i2c_msg xfer_msg[1];
 	int err;
 	u8 tmp_buf[num + 1];
 
@@ -459,9 +459,9 @@ static int gsl_write_interface(struct i2c_client *client,
 
 	xfer_msg[0].addr = client->addr;
 	xfer_msg[0].len = num + 1;
-	xfer_msg[0].flags = 0;//client->flags & I2C_M_TEN;
+	xfer_msg[0].flags = client->flags & I2C_M_TEN;
 	xfer_msg[0].buf = tmp_buf;
-	//xfer_msg[0].timing = 400;//I2C_TRANS_SPEED;
+	xfer_msg[0].timing = 400;
 	mutex_lock(&gsl_i2c_lock);
 
 	err = i2c_transfer(client->adapter, xfer_msg, 1);
@@ -819,8 +819,8 @@ static void check_mem_data(struct i2c_client *client)
 	char read_buf[4] = {0};
 	gsl_read_interface(client, 0xb0, read_buf, 4);
 
-	print_info("[gsl1680][%s] addr = 0xb0; read_buf = %02x%02x%02x%02x\n",
-		__func__, read_buf[3], read_buf[2], read_buf[1], read_buf[0]);
+	//print_info("[gsl1680][%s] addr = 0xb0; read_buf = %02x%02x%02x%02x\n",
+	//	__func__, read_buf[3], read_buf[2], read_buf[1], read_buf[0]);
 	if (read_buf[3] != 0x5a || read_buf[2] != 0x5a || read_buf[1] != 0x5a || read_buf[0] != 0x5a)
 	{
 		#ifdef TPD_POWER_VTP28_USE_VCAMA  //add for esd
@@ -844,34 +844,6 @@ static void check_mem_data(struct i2c_client *client)
 }
 
 #ifdef TPD_PROC_DEBUG
-#define GSL_APPLICATION
-#ifdef GSL_APPLICATION
-static int gsl_read_MorePage(struct i2c_client *client,u32 addr,u8 *buf,u32 num)
-{
-	int i;
-	u8 tmp_buf[4] = {0};
-	u8 tmp_addr;
-	for(i=0;i<num/8;i++){
-		tmp_buf[0]=(char)((addr+i*8)/0x80);
-		tmp_buf[1]=(char)(((addr+i*8)/0x80)>>8);
-		tmp_buf[2]=(char)(((addr+i*8)/0x80)>>16);
-		tmp_buf[3]=(char)(((addr+i*8)/0x80)>>24);
-		gsl_write_interface(client,0xf0,tmp_buf,4);
-		tmp_addr = (char)((addr+i*8)%0x80);
-		gsl_read_interface(client,tmp_addr,(buf+i*8),8);
-	}
-	if(i*8<num){
-		tmp_buf[0]=(char)((addr+i*8)/0x80);
-		tmp_buf[1]=(char)(((addr+i*8)/0x80)>>8);
-		tmp_buf[2]=(char)(((addr+i*8)/0x80)>>16);
-		tmp_buf[3]=(char)(((addr+i*8)/0x80)>>24);
-		gsl_write_interface(client,0xf0,tmp_buf,4);
-		tmp_addr = (char)((addr+i*8)%0x80);
-		gsl_read_interface(client,tmp_addr,(buf+i*8),4);
-	}
-	return 0;//modify crystal
-}
-#endif
 static int char_to_int(char ch)
 {
 	if(ch>='0' && ch<='9')
@@ -880,7 +852,6 @@ static int char_to_int(char ch)
 		return (ch-'a'+10);
 }
 
-//static int gsl_config_read_proc(char *page, char **start, off_t off, int count, int *eof, void *data)
 static int gsl_config_read_proc(struct seq_file *m,void *v)
 {
 	char temp_data[5] = {0};
@@ -902,7 +873,7 @@ static int gsl_config_read_proc(struct seq_file *m,void *v)
 #ifdef GSL_ALG_ID 
 			tmp=(gsl_data_proc[5]<<8) | gsl_data_proc[4];
 			seq_printf(m,"gsl_config_data_id[%d] = ",tmp);
-			if(tmp>=0&&tmp<gsl_cfg_table[gsl_cfg_index].data_size)
+			if(tmp>=0&&tmp<512)
 				seq_printf(m,"%d\n",gsl_cfg_table[gsl_cfg_index].data_id[tmp]); 
 #endif
 		}
@@ -917,33 +888,9 @@ static int gsl_config_read_proc(struct seq_file *m,void *v)
 			seq_printf(m,"%02x};\n",temp_data[0]);
 		}
 	}
-#ifdef GSL_APPLICATION
-	else if('a'==gsl_read[0]&&'p'==gsl_read[1]){
-		char *buf;
-		int temp1;
-		tmp = (unsigned int)(((gsl_data_proc[2]<<8)|gsl_data_proc[1])&0xffff);
-		buf=kzalloc(tmp,GFP_KERNEL);
-		if(buf==NULL)
-			return -1;
-		if(3==gsl_data_proc[0]){
-			gsl_read_interface(ddata->client,gsl_data_proc[3],buf,tmp);
-			if(tmp < m->size){
-				memcpy(m->buf,buf,tmp);
-			}
-		}else if(4==gsl_data_proc[0]){
-			temp1=((gsl_data_proc[6]<<24)|(gsl_data_proc[5]<<16)|
-				(gsl_data_proc[4]<<8)|gsl_data_proc[3]);
-			gsl_read_MorePage(ddata->client,temp1,buf,tmp);
-			if(tmp < m->size){
-				memcpy(m->buf,buf,tmp);
-			}
-		}
-		kfree(buf);
-	}
-#endif
 	return 0;
 }
-//static int gsl_config_write_proc(struct file *file, const char *buffer, unsigned long count, void *data)
+
 static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buffer, size_t  count, loff_t *data)
 {
 	u8 buf[8] = {0};
@@ -970,9 +917,6 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 	}
 	memcpy(temp_buf,path_buf,(count<CONFIG_LEN?count:CONFIG_LEN));
 	print_info("[tp-gsl][%s][%s]\n",__func__,temp_buf);
-#ifdef GSL_APPLICATION
-	if('a'!=temp_buf[0]||'p'!=temp_buf[1]){
-#endif
 	buf[3]=char_to_int(temp_buf[14])<<4 | char_to_int(temp_buf[15]);	
 	buf[2]=char_to_int(temp_buf[16])<<4 | char_to_int(temp_buf[17]);
 	buf[1]=char_to_int(temp_buf[18])<<4 | char_to_int(temp_buf[19]);
@@ -982,9 +926,6 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 	buf[6]=char_to_int(temp_buf[7])<<4 | char_to_int(temp_buf[8]);
 	buf[5]=char_to_int(temp_buf[9])<<4 | char_to_int(temp_buf[10]);
 	buf[4]=char_to_int(temp_buf[11])<<4 | char_to_int(temp_buf[12]);
-#ifdef GSL_APPLICATION
-	}
-#endif
 	if('v'==temp_buf[0]&& 's'==temp_buf[1])//version //vs
 	{
 		memcpy(gsl_read,temp_buf,4);
@@ -992,6 +933,10 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 	}
 	else if('s'==temp_buf[0]&& 't'==temp_buf[1])//start //st
 	{
+#ifdef GSL_TIMER	
+		cancel_delayed_work_sync(&gsl_timer_check_work);
+		i2c_lock_flag=1;
+#endif
 		gsl_proc_flag = 1;
 		gsl_reset_core(ddata->client);
 	}
@@ -1001,6 +946,10 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 		gsl_reset_core(ddata->client);
 		gsl_start_core(ddata->client);
 		gsl_proc_flag = 0;
+#ifdef GSL_TIMER 
+		i2c_lock_flag=0;
+		//queue_delayed_work(gsl_timer_workqueue, &gsl_timer_check_work, GSL_TIMER_CHECK_CIRCLE);
+#endif
 	}
 	else if('r'==temp_buf[0]&&'e'==temp_buf[1])//read buf //
 	{
@@ -1017,31 +966,9 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 	{
 		tmp1=(buf[7]<<24)|(buf[6]<<16)|(buf[5]<<8)|buf[4];
 		tmp=(buf[3]<<24)|(buf[2]<<16)|(buf[1]<<8)|buf[0];
-		if(tmp1>=0 && tmp1<gsl_cfg_table[gsl_cfg_index].data_size)
+		if(tmp1>=0 && tmp1<512)
 		{
 			gsl_cfg_table[gsl_cfg_index].data_id[tmp1] = tmp;
-		}
-	}
-#endif
-#ifdef GSL_APPLICATION
-	else if('a'==temp_buf[0]&&'p'==temp_buf[1]){
-		if(1==path_buf[3]){
-			tmp=((path_buf[5]<<8)|path_buf[4]);
-			gsl_write_interface(ddata->client,path_buf[6],&path_buf[10],tmp);
-		}else if(2==path_buf[3]){
-			tmp = ((path_buf[5]<<8)|path_buf[4]);
-			tmp1=((path_buf[9]<<24)|(path_buf[8]<<16)|(path_buf[7]<<8)
-				|path_buf[6]);
-			buf[0]=(char)((tmp1/0x80)&0xff);
-			buf[1]=(char)(((tmp1/0x80)>>8)&0xff);
-			buf[2]=(char)(((tmp1/0x80)>>16)&0xff);
-			buf[3]=(char)(((tmp1/0x80)>>24)&0xff);
-			buf[4]=(char)(tmp1%0x80);
-			gsl_write_interface(ddata->client,0xf0,buf,4);
-			gsl_write_interface(ddata->client,buf[4],&path_buf[10],tmp);
-		}else if(3==path_buf[3]||4==path_buf[3]){
-			memcpy(gsl_read,temp_buf,4);
-			memcpy(gsl_data_proc,&path_buf[3],7);
 		}
 	}
 #endif
@@ -1172,7 +1099,6 @@ static int tpd_enable_ps(int enable)
 	gsl_ps_enable = enable;
 	printk("tpd_enable_ps:gsl_ps_enable = %d\n",gsl_ps_enable);
 	if (enable) {
-		//wake_lock(&ps_lock);
 		buf[3] = 0x00;
 		buf[2] = 0x00;
 		buf[1] = 0x00;
@@ -1182,14 +1108,14 @@ static int tpd_enable_ps(int enable)
 		buf[2] = 0x0;
 		buf[1] = 0x0;
 		buf[0] = 0x2;
-		gsl_write_interface(ddata->client, 0, buf, 4);
+		gsl_write_interface(ddata->client, 0x00, buf, 4);
 		
 		tpd_proximity_flag = 1;
 		//add alps of function
 		printk("tpd-ps function is on\n");
+		wake_lock(&ps_lock);
 	} else {
 		tpd_proximity_flag = 0;
-		//wake_unlock(&ps_lock);
 		buf[3] = 0x00;
 		buf[2] = 0x00;
 		buf[1] = 0x00;
@@ -1199,9 +1125,11 @@ static int tpd_enable_ps(int enable)
 		buf[2] = 0x00;
 		buf[1] = 0x00;
 		buf[0] = 0x00;
-		gsl_write_interface(ddata->client, 0, buf, 4);
+		gsl_write_interface(ddata->client, 0x00, buf, 4);
 		printk("tpd-ps function is off\n");
+		wake_unlock(&ps_lock);
 	}
+	printk("tpd_enable_ps end\n");
 	return 0;
 }
 
@@ -1223,6 +1151,10 @@ static int ps_enable_nodata(int en)
 #endif				/* #ifdef CUSTOM_KERNEL_SENSORHUB */
 
 	printk("gsl_obj ps enable value = %d\n", en);
+	
+#ifdef GSL_TIMER
+    i2c_lock_flag = 1;
+#endif
 	if (en) {
 		tpd_enable_ps(1);
 		set_bit(CMC_BIT_PS, &gsl_obj->enable);
@@ -1230,6 +1162,10 @@ static int ps_enable_nodata(int en)
 		tpd_enable_ps(0);
 		clear_bit(CMC_BIT_PS, &gsl_obj->enable);
 	}
+#ifdef GSL_TIMER
+    i2c_lock_flag = 0;
+#endif
+	printk("gsl_obj ps_enable_nodata end --\n");
 	return 0;
 }
 
@@ -1602,7 +1538,7 @@ static void gsl_report_work(void)
 
 #ifdef TPD_PROC_DEBUG
 	if(gsl_proc_flag == 1){
-		return;
+		goto i2c_lock_schedule;
 	}
 #endif	
 
@@ -1743,7 +1679,7 @@ static void gsl_report_work(void)
 			do_gettimeofday(&time_now);
 			if(time_now.tv_sec - time_last.tv_sec <= 1 
 			&& (time_now.tv_sec - time_last.tv_sec)*1000*1000 + (time_now.tv_usec - time_last.tv_usec) < 700*1000)
-				return;
+				goto i2c_lock_schedule;
 
 			#ifdef CONFIG_OF_TOUCH	
 			tpd_gpio_output(GTP_RST_PORT, 0);	
@@ -1770,16 +1706,16 @@ static void gsl_report_work(void)
 				input_sync(tpd->dev);
 				msleep(400);
 			}
-			return;
+			goto i2c_lock_schedule;
 		}
 #endif
 
 	gsl_report_point(&cinfo);
 
 
-
-#ifdef GSL_TIMER
 i2c_lock_schedule:
+	;
+#ifdef GSL_TIMER
 	i2c_lock_flag = 0;
 	
 #endif
@@ -2176,6 +2112,7 @@ static int  gsl_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	gsl_DataInit(gsl_cfg_table[gsl_cfg_index].data_id);
 #endif
 #ifdef TPD_PROXIMITY
+	wake_lock_init(&ps_lock, WAKE_LOCK_SUSPEND, "ps wakelock");
 	gsl_obj = kzalloc(sizeof(*gsl_obj), GFP_KERNEL);
 	ps_ctl.is_use_common_factory = false;
 	ps_ctl.open_report_data = ps_open_report_data;
@@ -2442,7 +2379,13 @@ static void gsl_resume(struct device *h)
 {
 	print_info();
 
-
+#ifdef TPD_PROXIMITY
+	printk("==TPD_PROXIMITY1== %d \n",tpd_proximity_flag);
+	if (tpd_proximity_flag == 1&&gsl_halt_flag == 0){
+		tpd_enable_ps(1);
+		return;
+	}
+#endif
 
 #ifdef TPD_PROC_DEBUG
 	if(gsl_proc_flag == 1){
@@ -2492,13 +2435,11 @@ i2c_lock_flag=0;
 	gsl_halt_flag = 0;
 	
 #ifdef TPD_PROXIMITY
-	printk("==TPD_PROXIMITY== %d \n",tpd_proximity_flag);
+	printk("==TPD_PROXIMITY2== %d \n",tpd_proximity_flag);
 	if (tpd_proximity_flag == 1&&gsl_halt_flag == 0)
-	{
 		tpd_enable_ps(1);
-		return;
-	}
 #endif
+	return;
 
 }
 
