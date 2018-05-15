@@ -188,6 +188,16 @@
 #define GSL_SCALE_MAX_HIGHT 1440
 #define GSL_IDENTY_TP_BY_DAC
 #define GSL_NOID_VERSION
+#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+#include "gsl1691_dhs_s01_480x960_heshengda_chenghe.h"
+#define TPD_PS_SUPPORT
+#define GSL_GESTURE
+#define TPD_HAVE_BUTTON
+
+#define GSL_SCALE_MAX_WIDTH 720
+#define GSL_SCALE_MAX_HIGHT 960
+#define GSL_IDENTY_TP_BY_DAC
+#define GSL_NOID_VERSION
 #elif defined(GSLX680_DHD_Y01_QHD_CHENHE_HESHENGDA)
 #include "gslx680_dhd_y01_qhd_chenhe_heshengda.h"
 #define TPD_PS_SUPPORT

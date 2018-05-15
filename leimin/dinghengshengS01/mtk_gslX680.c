@@ -315,6 +315,11 @@ static void startup_chip(struct i2c_client *client)
 			gsl_DataInit(gsl_config_data_id_hsd);
 	  else  
 			gsl_DataInit(gsl_config_data_id);
+	#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+		if(tp_identy==0)
+			gsl_DataInit(gsl_config_data_id);
+	  	else  
+			gsl_DataInit(gsl_config_data_id_heshengda);
 	#else
 		if(tp_identy==0)
 			gsl_DataInit(gsl_config_data_id_ch);
@@ -427,8 +432,13 @@ static void gsl_load_fw(struct i2c_client *client)
 
 	printk("=============gsl_load_fw start==============\n");
 
-	ptr_fw = GSLX680_FW;
-	source_len = ARRAY_SIZE(GSLX680_FW);
+#if defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+		ptr_fw = GSLX680_FW_HESHENGDA;
+		source_len = ARRAY_SIZE(GSLX680_FW_HESHENGDA);
+#else
+		ptr_fw = GSLX680_FW;
+		source_len = ARRAY_SIZE(GSLX680_FW);
+#endif
 	for (source_line = 0; source_line < source_len; source_line++) 
 	{
 		/* init page trans, set the page val */
@@ -474,6 +484,9 @@ static void gsl_load_fw_CH(struct i2c_client *client)
 	#elif defined(GSLX680_DHD_F18_HESHENGDA_CHENGHE_SCALE_TO_LCM)
 		ptr_fw = GSLX680_FW_HSD;
 		source_len = ARRAY_SIZE(GSLX680_FW_HSD);
+	#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+		ptr_fw = GSLX680_FW;
+		source_len = ARRAY_SIZE(GSLX680_FW);
 	#else
 		ptr_fw = GSLX680_FW_CH;
 		source_len = ARRAY_SIZE(GSLX680_FW_CH);
@@ -533,8 +546,14 @@ static void gsl_load_fw(struct i2c_client *client)
 		source_len = data_len;
 	}
 #else
+#if defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+		ptr_fw = GSLX680_FW_HESHENGDA;
+		source_len = ARRAY_SIZE(GSLX680_FW_HESHENGDA);
+#else
 		ptr_fw = GSLX680_FW;
 		source_len = ARRAY_SIZE(GSLX680_FW);
+#endif
+
 #endif
 	printk("=============gsl_load_fw start==============\n");
 
@@ -672,7 +691,38 @@ static void gsl_identify_tp_by_dac(struct i2c_client *client)
  	}
     
         first_init_flag =1;
+#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)   
+	//i2c_smbus_write_i2c_block_data(client, 0xf0, 4, readbuf);
+	//msleep(50);
+	//ret =i2c_smbus_read_i2c_block_data(client, 0x10, 4, readbuf);
+	gsl_ts_write(client, 0xf0, writebuf, 4); 	
+	msleep(50);
+	ret =gsl_ts_read(client,0x10, readbuf, 4);
+	if (ret < 0) 
+		//i2c_smbus_read_i2c_block_data(client, 0x10, 4, readbuf);
+		gsl_ts_read(client,0x10, readbuf, 4);
 
+	printk("======read 1fe1000,10: %x %x %x %x======\n",readbuf[3], readbuf[2], readbuf[1], readbuf[0]);
+
+	if(first_init_flag ==0 ){   
+		if(readbuf[0] > 0x15 ){
+       	 	tp_identy = 0;
+	  	}else{
+        	tp_identy=1;  
+        }
+    }
+
+	if ( tp_identy== 0){
+    	reset_chip(client);
+		gsl_load_fw_CH(client);
+        startup_chip(client);
+ 	}else{
+        reset_chip(client);
+		gsl_load_fw(client);			
+		startup_chip(client); 
+    }
+    
+    first_init_flag =1;
 #else
     gsl_ts_write(client, 0xf0, writebuf, 4); 	
     msleep(50);
@@ -1130,6 +1180,11 @@ static int gsl_config_read_proc(struct seq_file *m,void *v)
 					seq_printf(m,"%d\n",gsl_config_data_id[tmp]); 
 						else
 							seq_printf(m,"%d\n",gsl_config_data_id_hsd[tmp]);
+	#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+				if(tp_identy == 0)
+					seq_printf(m,"%d\n",gsl_config_data_id[tmp]); 
+						else
+							seq_printf(m,"%d\n",gsl_config_data_id_heshengda[tmp]);
 	#else
 				if(tp_identy == 1)
 						 seq_printf(m,"%d\n",gsl_config_data_id[tmp]);
@@ -1233,6 +1288,11 @@ static int gsl_config_write_proc(struct file *file, const char *buffer, unsigned
 				gsl_config_data_id[tmp1] = tmp2;
 			else
 				gsl_config_data_id_hsd[tmp1] = tmp2;
+		#elif defined(GSL1691_DHS_S01_480X960_CHENHE_HESHENGDA)
+			if(tp_identy == 0)
+				gsl_config_data_id[tmp1] = tmp2;
+			else
+				gsl_config_data_id_heshengda[tmp1] = tmp2;
 		#else
 			if(tp_identy == 1)
 				gsl_config_data_id[tmp1] = tmp2;
