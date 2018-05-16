@@ -935,6 +935,10 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 	}
 	else if('s'==temp_buf[0]&& 't'==temp_buf[1])//start //st
 	{
+#ifdef GSL_TIMER
+    i2c_lock_flag = 1;	
+	cancel_delayed_work_sync(&gsl_timer_check_work);
+#endif
 		gsl_proc_flag = 1;
 		gsl_reset_core(ddata->client);
 	}
@@ -944,6 +948,9 @@ static ssize_t  gsl_config_write_proc(struct file *file, const char __user  *buf
 		gsl_reset_core(ddata->client);
 		gsl_start_core(ddata->client);
 		gsl_proc_flag = 0;
+#ifdef GSL_TIMER
+    i2c_lock_flag = 0;	
+#endif
 	}
 	else if('r'==temp_buf[0]&&'e'==temp_buf[1])//read buf //
 	{
