@@ -1194,7 +1194,7 @@ static int ps_batch(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLa
 
 static int ps_flush(void)
 {
-	return 0;
+	return ps_flush_report();
 }
 
 /*
