@@ -16,7 +16,7 @@
 static kal_uint32 *gsl_config_data_id = NULL;
 static int gsl_tp_type = 0;
 int *p,tmp0_result, tmp1_result, tmp2_result,tmp3_result;
-int length_reg = (sizeof(int) * (int)sizeof(*p) * 2);
+int length_reg = 32;
 int id_type_err=0;
 
 #endif
