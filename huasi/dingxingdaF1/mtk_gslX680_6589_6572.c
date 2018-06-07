@@ -121,12 +121,6 @@ static u8 gsl_proc_flag = 0;
 #endif
 
 static int gsl_up_flag = 0;
-#ifdef GSL_IDENTY_TP
-static unsigned int *gsl_config_data_id = gsl_config_data_id_1; //= gsl_config_data_id_968;
-int id_type_err = 0;
-kal_uint8 read_b8[4] = {0x00};
-kal_uint8 read_ac[4] = {0x00};
-#endif
 static int tpd_flag = 0;
 static int tpd_halt=0;
 static char eint_flag = 0;
@@ -167,8 +161,8 @@ extern void gsl_FunIICRead(unsigned int (*ReadIICInt)(unsigned int *, unsigned i
 #endif
 
 static kal_uint32 id_sign[MAX_CONTACTS+1] = {0};
-static kal_uint8 id_state_flag[MAX_CONTACTS+1] = {0};
-static kal_uint8 id_state_old_flag[MAX_CONTACTS+1] = {0};
+static unsigned char id_state_flag[MAX_CONTACTS+1] = {0};
+static unsigned char id_state_old_flag[MAX_CONTACTS+1] = {0};
 static kal_uint16 x_old[MAX_CONTACTS+1] = {0};
 static kal_uint16 y_old[MAX_CONTACTS+1] = {0};
 static kal_uint16 x_new = 0;
@@ -187,9 +181,9 @@ static DECLARE_WAIT_QUEUE_HEAD(waiter);
 #ifdef MT6575 
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
-extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
-extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
-extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
+extern void mt65xx_eint_set_hw_debounce(unsigned char eintno, kal_uint32 ms);
+extern kal_uint32 mt65xx_eint_set_sens(unsigned char eintno, kal_bool sens);
+extern void mt65xx_eint_registration(unsigned char eintno, kal_bool Dbounce_En,
 		kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
 		kal_bool auto_umask);
 #endif
@@ -309,7 +303,7 @@ static void startup_chip(struct i2c_client *client)
 #endif	
 	i2c_smbus_write_i2c_block_data(client, 0xe0, 1, &write_buf); 	
 #ifdef GSL_NOID_VERSION
-	gsl_DataInit(gsl_config_data_id);
+	gsl_DataInit(gsl_cfg_table[gsl_cfg_index].data_id);
 #endif
 
 	msleep(10);		
@@ -461,53 +455,48 @@ static void gsl_load_fw(struct i2c_client *client)
 
 }
 #else
-#ifdef GSL_IDENTY_TP
+
 static void gsl_load_fw(struct i2c_client *client,const struct fw_data *GSL_DOWNLOAD_DATA,int data_len)
 {
 	char buf[SMBUS_TRANS_LEN*4] = {0};
 	char reg = 0, send_flag = 1, cur = 0;
 	
 	unsigned int source_line = 0;
-	unsigned int source_len = 0;
-	struct fw_data *ptr_fw;
-		{
-			ptr_fw = GSL_DOWNLOAD_DATA;
-			source_len = data_len;
-		}
+
 
 	printk("=============gsl_load_fw start==============\n");
 
-	for (source_line = 0; source_line < source_len; source_line++) 
+	for (source_line = 0; source_line < data_len; source_line++) 
 	{
 		if(1 == SMBUS_TRANS_LEN)
 		{
-			reg = ptr_fw[source_line].offset;
+			reg = GSL_DOWNLOAD_DATA[source_line].offset;
 
-			buf[0] = (char)(ptr_fw[source_line].val & 0x000000ff);
-			buf[1] = (char)((ptr_fw[source_line].val & 0x0000ff00) >> 8);
-			buf[2] = (char)((ptr_fw[source_line].val & 0x00ff0000) >> 16);
-			buf[3] = (char)((ptr_fw[source_line].val & 0xff000000) >> 24);
+			buf[0] = (char)(GSL_DOWNLOAD_DATA[source_line].val & 0x000000ff);
+			buf[1] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0x0000ff00) >> 8);
+			buf[2] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0x00ff0000) >> 16);
+			buf[3] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0xff000000) >> 24);
 
 			i2c_smbus_write_i2c_block_data(client, reg, 4, buf); 	
 		}
 		else
 		{
 			/* init page trans, set the page val */
-			if (GSL_PAGE_REG == ptr_fw[source_line].offset)
+			if (GSL_PAGE_REG == GSL_DOWNLOAD_DATA[source_line].offset)
 			{
-				buf[0] = (char)(ptr_fw[source_line].val & 0x000000ff);
+				buf[0] = (char)(GSL_DOWNLOAD_DATA[source_line].val & 0x000000ff);
 				i2c_smbus_write_i2c_block_data(client, GSL_PAGE_REG, 1, &buf[0]); 	
 				send_flag = 1;
 			}
 			else 
 			{
 				if (1 == send_flag % (SMBUS_TRANS_LEN < 0x08 ? SMBUS_TRANS_LEN : 0x08))
-					reg = ptr_fw[source_line].offset;
+					reg = GSL_DOWNLOAD_DATA[source_line].offset;
 
-				buf[cur + 0] = (char)(ptr_fw[source_line].val & 0x000000ff);
-				buf[cur + 1] = (char)((ptr_fw[source_line].val & 0x0000ff00) >> 8);
-				buf[cur + 2] = (char)((ptr_fw[source_line].val & 0x00ff0000) >> 16);
-				buf[cur + 3] = (char)((ptr_fw[source_line].val & 0xff000000) >> 24);
+				buf[cur + 0] = (char)(GSL_DOWNLOAD_DATA[source_line].val & 0x000000ff);
+				buf[cur + 1] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0x0000ff00) >> 8);
+				buf[cur + 2] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0x00ff0000) >> 16);
+				buf[cur + 3] = (char)((GSL_DOWNLOAD_DATA[source_line].val & 0xff000000) >> 24);
 				cur += 4;
 
 				if (0 == send_flag % (SMBUS_TRANS_LEN < 0x08 ? SMBUS_TRANS_LEN : 0x08)) 
@@ -525,67 +514,6 @@ static void gsl_load_fw(struct i2c_client *client,const struct fw_data *GSL_DOWN
 	printk("=============gsl_load_fw end==============\n");
 
 }
-#else
-static void gsl_load_fw(struct i2c_client *client)
-{
-	char buf[SMBUS_TRANS_LEN*4] = {0};
-	char reg = 0, send_flag = 1, cur = 0;
-	
-	unsigned int source_line = 0;
-	unsigned int source_len = ARRAY_SIZE(GSLX680_FW);
-
-	printk("=============gsl_load_fw start==============\n");
-
-	for (source_line = 0; source_line < source_len; source_line++) 
-	{
-		if(1 == SMBUS_TRANS_LEN)
-		{
-			reg = GSLX680_FW[source_line].offset;
-
-			buf[0] = (char)(GSLX680_FW[source_line].val & 0x000000ff);
-			buf[1] = (char)((GSLX680_FW[source_line].val & 0x0000ff00) >> 8);
-			buf[2] = (char)((GSLX680_FW[source_line].val & 0x00ff0000) >> 16);
-			buf[3] = (char)((GSLX680_FW[source_line].val & 0xff000000) >> 24);
-
-			i2c_smbus_write_i2c_block_data(client, reg, 4, buf); 	
-		}
-		else
-		{
-			/* init page trans, set the page val */
-			if (GSL_PAGE_REG == GSLX680_FW[source_line].offset)
-			{
-				buf[0] = (char)(GSLX680_FW[source_line].val & 0x000000ff);
-				i2c_smbus_write_i2c_block_data(client, GSL_PAGE_REG, 1, &buf[0]); 	
-				send_flag = 1;
-			}
-			else 
-			{
-				if (1 == send_flag % (SMBUS_TRANS_LEN < 0x08 ? SMBUS_TRANS_LEN : 0x08))
-					reg = GSLX680_FW[source_line].offset;
-
-				buf[cur + 0] = (char)(GSLX680_FW[source_line].val & 0x000000ff);
-				buf[cur + 1] = (char)((GSLX680_FW[source_line].val & 0x0000ff00) >> 8);
-				buf[cur + 2] = (char)((GSLX680_FW[source_line].val & 0x00ff0000) >> 16);
-				buf[cur + 3] = (char)((GSLX680_FW[source_line].val & 0xff000000) >> 24);
-				cur += 4;
-
-				if (0 == send_flag % (SMBUS_TRANS_LEN < 0x08 ? SMBUS_TRANS_LEN : 0x08)) 
-				{
-					i2c_smbus_write_i2c_block_data(client, reg, SMBUS_TRANS_LEN*4, buf); 	
-					cur = 0;
-				}
-
-				send_flag++;
-
-			}
-		}
-	}
-
-	printk("=============gsl_load_fw end==============\n");
-
-}
-#endif
-
 #endif
 
 static int test_i2c(struct i2c_client *client)
@@ -615,19 +543,18 @@ static int test_i2c(struct i2c_client *client)
 	return rc;
 }
 
-#ifdef GSL_IDENTY_TP
+#ifdef GSL_IDENTY_TP_2338
 int gsl_get_min(int a,int b)
 {
 	return (a<=b) ? a : b;
 }
 
-int gsl_reg_compare(kal_uint32 sample, kal_uint32 compare)
+int gsl_reg_compare(unsigned int sample, unsigned int compare)
 {
 	char tmp1;
 	int i,*p;
 	int result = 0;
-	int length_reg = (int)(sizeof(int) * sizeof(p));
-	kal_uint32 filler = 0x01;
+	unsigned int filler = 0x01;
 	for (i=0; i<length_reg; i++) {
 		if((sample & (filler << i)) && (!(compare & (filler << i))))
 				result++;
@@ -639,117 +566,85 @@ int gsl_reg_compare(kal_uint32 sample, kal_uint32 compare)
 
 static void gsl_identify_tp(struct i2c_client *client)
 {
-	kal_uint8 addr = 0x00;
-	kal_uint8 write_buf = 0x00;
-	//kal_uint8 read_b8[4] = {0x00};
-	//kal_uint8 read_ac[4] = {0x00};
-	kal_uint8 read_b4[4] = {0x00};
-	int i,tmp0_result, tmp1_result, tmp2_result;
-	unsigned int fw_len = 0;
-	kal_uint32 tmp_b8 = 0x00000000;
-	kal_uint32 tmp_ac = 0x00000000;
+	int i;
+	unsigned char addr = 0x00;
+	unsigned char write_buf = 0x00;
+	unsigned char read_b4[4] = {0x00};
+	unsigned char read_b8[4] = {0x00};
+	unsigned char read_ac[4] = {0x00};
+	unsigned int tmp_b8 = 0x00000000;
+	unsigned int tmp_ac = 0x00000000;
 	
 	for (i = 0; i < 8; i++ ) {
-		/* Download GSL_TP_CHECK_FW */
+		mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
+		mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
+		mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);
+		msleep(50); 	
+		mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
+		msleep(20);
+		
 		clr_reg(client);
 		reset_chip(client);
-		fw_len = sizeof(GSL_TP_CHECK_FW)/sizeof(GSL_TP_CHECK_FW[0]);
-		gsl_load_fw( client,GSL_TP_CHECK_FW, fw_len);
-		//start ic
-		i2c_smbus_write_i2c_block_data(client, 0xe0, 1, &write_buf); 	
+		gsl_cfg_index = 0;
+		gsl_load_fw(client, 
+			gsl_cfg_table[gsl_cfg_index].fw, 
+			gsl_cfg_table[gsl_cfg_index].fw_size);
+		startup_chip(client);
 		msleep(200);
-
-		/* Check FW status check, load agin by fail result*/
+		
 		addr = 0xb4;
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_b4 );
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_b4 );
-		if( !read_b4[0] && !read_b4[1] && !read_b4[2] && !read_b4[3] ){
-			print_info("[TP]gsl_identify_tp read 0xb4 error!! %x,%x,%x,%x", 
-			read_b4[3],read_b4[2],read_b4[1],read_b4[0]);
-			id_type_err++;
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_b4), read_b4);
+		msleep(10);
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_b4), read_b4);
+		msleep(10);
+		if(!read_b4[0]&&!read_b4[1]&&!read_b4[2]&&!read_b4[3]){
+			printk("[TP]gsl_identify_tp read 0xb4 = 0x%02x%02x%02x%02x /n", 
+				read_b4[3],read_b4[2],read_b4[1],read_b4[0]);
 			continue;
 		}
 		
-		/* B8 REG CHECK */
 		addr = 0xb8;
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_b8 );
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_b8 );
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_b8), read_b8);
+		msleep(10);
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_b8), read_b8);
+		msleep(10);
 		tmp_b8 = (read_b8[3]<<24)|(read_b8[2]<<16)|(read_b8[1]<<8)|read_b8[0];
-		print_info("[TP]gsl_identify_tp read 0xb8 = %x,%x,%x,%x", 
+		printk("[TP]gsl_identify_tp read 0xb8 = 0x%02x%02x%02x%02x /n", 
 			read_b8[3],read_b8[2],read_b8[1],read_b8[0]);
 		
-		/* AC REG CHECK */
 		addr = 0xac;
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_ac );
-		i2c_smbus_read_i2c_block_data( client, addr, 4, read_ac );
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_ac), read_ac);
+		msleep(10);
+		i2c_smbus_read_i2c_block_data(client,addr, sizeof(read_ac), read_ac);
+		msleep(10);
 		tmp_ac = (read_ac[3]<<24)|(read_ac[2]<<16)|(read_ac[1]<<8)|read_ac[0];
-		print_info("[TP]gsl_identify_tp read 0xac = %x,%x,%x,%x", 
+		printk("[TP]gsl_identify_tp read 0xac = 0x%02x%02x%02x%02x/n", 
 			read_ac[3],read_ac[2],read_ac[1],read_ac[0]);
-
+		
 		tmp0_result = 0;
 		tmp1_result = 0;
 		tmp2_result = 0;
-		
 		tmp1_result = gsl_reg_compare(FRIST_B8, tmp_b8);
 		tmp1_result += gsl_reg_compare(FRIST_AC, tmp_ac);
-
 		tmp2_result = gsl_reg_compare(SECOND_B8, tmp_b8);
 		tmp2_result += gsl_reg_compare(SECOND_AC, tmp_ac);
-
 		tmp0_result = gsl_get_min(tmp1_result, tmp2_result);
+        printk("tmp0_result=%d,tmp1_result=%d,tmp2_result=%d/n",
+			tmp0_result,tmp1_result,tmp2_result);
 
 		if (tmp0_result == tmp1_result){
-			print_info("[TP]gsl_identify_tp TP change 1st TP.");
-			gsl_tp_type = 1;	/* 1st tp */
+			printk("[TP]gsl_identify_tp TP change 1st TP./n");
+			gsl_cfg_index = 1;	/* 1st tp */
 			break;
 		} else if (tmp0_result == tmp2_result) {
-			print_info(, "[TP]gsl_identify_tp TP change 2nt TP.");
-			gsl_tp_type = 2;	/* 2nd tp */
+			printk("[TP]gsl_identify_tp TP change 2nd TP./n");
+			gsl_cfg_index = 2;	/* 2nd tp */
 			break;
-		} 
+		}
 	}
-}
-static void init_chip(struct i2c_client *client)
-{
-	int rc;	
-	u32 tmp;
 
-	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
-	mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
-	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);
-	msleep(20); 	
-	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
-	msleep(20); 		
-	rc = test_i2c(client);
-	if(rc < 0)
-	{
-		printk("------gslX680 test_i2c error------\n");	
-		return;
-	}	
-	clr_reg(client);
-	reset_chip(client);
-	if(0==gsl_tp_type)
-		gsl_identify_tp(client);		
-	reset_chip(client);
-	clr_reg(client);
-	reset_chip(client);
-
-	if(1==gsl_tp_type){
-		tmp = ARRAY_SIZE(GSLX680_FW_1);
-		gsl_load_fw(client,GSLX680_FW_1,tmp);
-		gsl_config_data_id = gsl_config_data_id_1;
-	}
-	else if(2==gsl_tp_type){
-		tmp = ARRAY_SIZE(GSLX680_FW_2);
-		gsl_load_fw(client,GSLX680_FW_2,tmp);
-		gsl_config_data_id = gsl_config_data_id_2;
-	}
-	
-	startup_chip(client);
-	reset_chip(client);
-	startup_chip(client);		
 }
-#else
+#endif
 static void init_chip(struct i2c_client *client)
 {
 	int rc;
@@ -768,12 +663,15 @@ static void init_chip(struct i2c_client *client)
 	}	
 	clr_reg(client);
 	reset_chip(client);
-	gsl_load_fw(client);			
+#ifdef GSL_IDENTY_TP_2338
+	gsl_identify_tp(client);
+#endif
+	gsl_load_fw(client, gsl_cfg_table[gsl_cfg_index].fw, gsl_cfg_table[gsl_cfg_index].fw_size);			
 	startup_chip(client);
 	reset_chip(client);
 	startup_chip(client);		
 }
-#endif
+
 
 static void check_mem_data(struct i2c_client *client)
 {
@@ -916,6 +814,7 @@ static int gsl_config_read_proc(char *page, char **start, off_t off, int count, 
 	char *ptr = page;
 	char temp_data[5] = {0};
 	unsigned int tmp=0;
+	int ret;
 	
 	if('v'==gsl_read[0]&&'s'==gsl_read[1])
 	{
@@ -935,16 +834,16 @@ static int gsl_config_read_proc(char *page, char **start, off_t off, int count, 
 			ptr +=sprintf(ptr,"gsl_config_data_id[%d] = ",tmp);
 			if(tmp>=0&&tmp<512)
 			{
-					ptr +=sprintf(ptr,"%d\n",gsl_config_data_id[tmp]); 
+					ptr +=sprintf(ptr,"%d\n",gsl_cfg_table[gsl_cfg_index].data_id[tmp]); 
 			}
 #endif
 		}
 		else 
 		{
 			i2c_smbus_write_i2c_block_data(i2c_client,0Xf0,4,&gsl_data_proc[4]);
-			if(gsl_data_proc[0] < 0x80)
+			ret = i2c_smbus_read_i2c_block_data(i2c_client,gsl_data_proc[0],4,temp_data);
+			if(ret<0)
 				i2c_smbus_read_i2c_block_data(i2c_client,gsl_data_proc[0],4,temp_data);
-			i2c_smbus_read_i2c_block_data(i2c_client,gsl_data_proc[0],4,temp_data);
 
 			ptr +=sprintf(ptr,"offset : {0x%02x,0x",gsl_data_proc[0]);
 			ptr +=sprintf(ptr,"%02x",temp_data[3]);
@@ -999,6 +898,10 @@ static int gsl_config_write_proc(struct file *file, const char *buffer, unsigned
 	}
 	else if('s'==temp_buf[0]&& 't'==temp_buf[1])//start //st
 	{
+#ifdef GSL_MONITOR
+	cancel_delayed_work_sync(&gsl_monitor_work);
+	i2c_lock_flag = 1;
+#endif
 		gsl_proc_flag = 1;
 		reset_chip(i2c_client);
 	}
@@ -1008,6 +911,9 @@ static int gsl_config_write_proc(struct file *file, const char *buffer, unsigned
 		reset_chip(i2c_client);
 		startup_chip(i2c_client);
 		gsl_proc_flag = 0;
+#ifdef GSL_MONITOR
+	i2c_lock_flag = 0;
+#endif
 	}
 	else if('r'==temp_buf[0]&&'e'==temp_buf[1])//read buf //
 	{
@@ -1025,7 +931,7 @@ static int gsl_config_write_proc(struct file *file, const char *buffer, unsigned
 		tmp=(buf[3]<<24)|(buf[2]<<16)|(buf[1]<<8)|buf[0];
 		if(tmp1>=0 && tmp1<512)
 		{
-			gsl_config_data_id[tmp1] = tmp;
+			gsl_cfg_table[gsl_cfg_index].data_id[tmp1] = tmp;
 		}
 	}
 #endif
@@ -2246,13 +2152,6 @@ void tpd_suspend(struct early_suspend *h)
 /* Function to manage power-on resume */
 void tpd_resume(struct early_suspend *h)
 {
-#ifdef GSL_IDENTY_TP
-	print_info("[TP] gsl GSL_IDENTY_TP read 0xb8 = %x,%x,%x,%x", 
-			read_b8[3],read_b8[2],read_b8[1],read_b8[0]);
-	print_info("[TP] gsl GSL_IDENTY_TP read 0xac = %x,%x,%x,%x", 
-			read_ac[3],read_ac[2],read_ac[1],read_ac[0]);
-	print_info("gsl  tpd_resume Error id_type_err[%d]!", id_type_err);
-#endif
 #ifdef TPD_PROXIMITY
 	if (tpd_proximity_flag == 1)
 	{
