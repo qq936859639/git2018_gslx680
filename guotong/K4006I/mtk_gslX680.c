@@ -57,7 +57,7 @@
 #include <sensors_io.h>
 #include <linux/wakelock.h>    //added by xen 20140904
 static u8 tpd_proximity_flag = 0; //flag whether start alps
-static u8 tpd_proximity_detect = 1;//0-->close ; 1--> far away
+static u8 tpd_proximity_detect = 20;//0-->close ; 20--> far away
 static struct wake_lock ps_lock;
 static u8 gsl_psensor_data[8]={0};
 #endif
@@ -1395,7 +1395,7 @@ static void report_data_handle(void)
 			}
 			else
 			{
-				tpd_proximity_detect = 1;
+				tpd_proximity_detect = 20;
 			}
 			GSL_DUBGE("gslX680    ps change   tpd_proximity_detect = %d  \n",tpd_proximity_detect);
 			//map and store data to hwm_sensor_data
