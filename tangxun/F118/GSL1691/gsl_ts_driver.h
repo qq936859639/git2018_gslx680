@@ -8,13 +8,8 @@
 #define GSL_DEBUG			//调试
 #define TPD_PROC_DEBUG		//adb调试
 #define GSL_TIMER			//定时器宏
-
-//#define GSL_TIMER			//定时器宏
 //#define TPD_PROXIMITY		//距离传感器宏
-
-
-
-#define GSL_GESTURE
+//#define GSL_GESTURE
 
 //#define GSL_GPIO_IDT_TP	//GPIO兼容	
 //#define GSL_DRV_WIRE_IDT_TP	//驱动线兼容
