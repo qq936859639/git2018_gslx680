@@ -222,6 +222,14 @@ static u16 y_old[MAX_CONTACTS + 1] = { 0 };
 static u16 x_new = 0;
 static u16 y_new = 0;
 
+#ifdef PEN_Adjust_Freq
+#define PEN_ACTIVE_OFFSET	1
+#define PEN_ACTIVE_FILTER	0x08
+#define PEN_ACTIVE_REPORT_ID	10
+/* pen mode status 0->finger mode[default]; 1->active pen */
+static int pen_mode_statu = 0;
+#endif
+
 int gslx680_set_pinctrl_state(struct gsl_ts *ts, struct pinctrl_state *state)
 {
 	int ret = 0;
@@ -1043,14 +1051,6 @@ static void report_data(struct gsl_ts *ts, u16 x, u16 y, u8 pressure, u8 id)
 		return;
 	}
 
-	/*
-	   input_mt_slot(ts->input_dev, id);
-	   input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, id);
-	   input_report_abs(ts->input_dev, ABS_MT_POSITION_X, x);
-	   input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, y);
-	   input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, w);
-	   input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, w);
-	 */
 #ifdef RK_GEAR_TOUCH
 	if (g_istouch == 0){
 		g_istouch = 1;
@@ -1072,11 +1072,26 @@ static void report_data(struct gsl_ts *ts, u16 x, u16 y, u8 pressure, u8 id)
 
 #ifdef REPORT_DATA_ANDROID_4_0
 	input_mt_slot(ts->input, id);		
+#ifdef PEN_Adjust_Freq
+	if (pen_mode_statu == 1) { /*  active pen mode */
+		input_report_abs(ts->input, ABS_MT_TRACKING_ID, PEN_ACTIVE_REPORT_ID+1);
+		input_mt_report_slot_state(ts->input,MT_TOOL_PEN,true);
+		input_report_abs(ts->input, ABS_MT_TOOL_TYPE, 1);
+		print_info("pen id=%d,x=%d,y=%d\n",id,x,y);
+	} else { /*  finger mode */
+		input_report_abs(ts->input, ABS_MT_TRACKING_ID, id);
+		input_mt_report_slot_state(ts->input,MT_TOOL_FINGER,true);
+		input_report_abs(ts->input, ABS_MT_TOOL_TYPE, 0);
+		print_info("finger id=%d,x=%d,y=%d\n",id,x,y);
+	}
+#else
 	input_report_abs(ts->input, ABS_MT_TRACKING_ID, id);
+#endif
+	input_report_abs(ts->input, ABS_MT_PRESSURE, pressure);
 	input_report_abs(ts->input, ABS_MT_TOUCH_MAJOR, pressure);
+	input_report_abs(ts->input, ABS_MT_WIDTH_MAJOR, pressure);
 	input_report_abs(ts->input, ABS_MT_POSITION_X, x);
-	input_report_abs(ts->input, ABS_MT_POSITION_Y, y);	
-	input_report_abs(ts->input, ABS_MT_WIDTH_MAJOR, 1);
+	input_report_abs(ts->input, ABS_MT_POSITION_Y, y);
 #else
 	//printk("#####nonono REPORT_DATA_ANDROID_4_0######\n");
 	input_report_abs(ts->input, ABS_MT_TRACKING_ID, id);
@@ -1144,7 +1159,14 @@ static void gslX680_ts_worker(struct work_struct *work)
 		dev_err(&ts->client->dev, "read failed\n");
 		goto schedule;
 	}
-
+#ifdef PEN_Adjust_Freq
+	if ((ts->touch_data[PEN_ACTIVE_OFFSET] & PEN_ACTIVE_FILTER)
+		!= 0) {		/*  active pen mode */
+		pen_mode_statu = 1;
+	} else {	/*  finger mode */
+		//pen_mode_statu = 0;
+	}
+#endif
 	touches = ts->touch_data[ts->dd->touch_index];
 	//print_info("-----touches: %d -----\n", touches);
 #ifdef GSL_NOID_VERSION
@@ -1212,7 +1234,7 @@ static void gslX680_ts_worker(struct work_struct *work)
 			record_point(x, y, id);
 #endif
 //#ifdef RK_GEAR_TOUCH
-			report_data(ts, x, y, 10, id);
+			report_data(ts, x, y, 50, id);
 //#endif
 			if (key_count <= 512) {
 				key_x[key_count] = x_new;
@@ -1225,6 +1247,12 @@ static void gslX680_ts_worker(struct work_struct *work)
 			id_state_flag[id] = 1;
 		}
 	}
+#ifdef PEN_Adjust_Freq
+	if ((ts->touch_data[PEN_ACTIVE_OFFSET] & PEN_ACTIVE_FILTER)
+		== 0) {		/*  finger mode */
+		pen_mode_statu = 0;
+	}
+#endif
 	for (i = 1; i <= MAX_CONTACTS; i++) {
 		if ((0 == touches)
 		    || ((0 != id_state_old_flag[i])
@@ -1565,8 +1593,13 @@ static int gslX680_ts_init(struct i2c_client *client, struct gsl_ts *ts)
 
 	ts->input = input_device;
 	input_device->name = GSLX680_I2C_NAME;
+	input_device->phys = "input/ts";
 	input_device->id.bustype = BUS_I2C;
-	input_device->dev.parent = &client->dev;
+	//input_device->dev.parent = &client->dev;
+	input_device->id.vendor = 0xDEAD;
+    input_device->id.product = 0xBEEF;
+    input_device->id.version = 10427;
+    
 	input_set_drvdata(input_device, ts);
 
 #ifdef REPORT_DATA_ANDROID_4_0
@@ -1576,10 +1609,9 @@ static int gslX680_ts_init(struct i2c_client *client, struct gsl_ts *ts)
 	__set_bit(EV_SYN, input_device->evbit);
 	__set_bit(INPUT_PROP_DIRECT, input_device->propbit);
 	__set_bit(MT_TOOL_FINGER, input_device->keybit);
+	__set_bit(MT_TOOL_PEN, input_device->keybit);
 	input_mt_init_slots(input_device, (MAX_CONTACTS + 1), 0);
 #else
-	input_set_abs_params(input_device, ABS_MT_TRACKING_ID, 0,
-			     (MAX_CONTACTS + 1), 0, 0);
 	set_bit(EV_ABS, input_device->evbit);
 	set_bit(EV_KEY, input_device->evbit);
 	__set_bit(INPUT_PROP_DIRECT, input_device->propbit);
@@ -1607,14 +1639,14 @@ static int gslX680_ts_init(struct i2c_client *client, struct gsl_ts *ts)
 	set_bit(ABS_MT_TOUCH_MAJOR, input_device->absbit);
 	set_bit(ABS_MT_WIDTH_MAJOR, input_device->absbit);
 
-	input_set_abs_params(input_device, ABS_MT_POSITION_X, 0, SCREEN_MAX_X,
-			     0, 0);
-	input_set_abs_params(input_device, ABS_MT_POSITION_Y, 0, SCREEN_MAX_Y,
-			     0, 0);
-	input_set_abs_params(input_device, ABS_MT_TOUCH_MAJOR, 0, PRESS_MAX, 0,
-			     0);
-	input_set_abs_params(input_device, ABS_MT_WIDTH_MAJOR, 0, 200, 0, 0);
-
+	input_set_abs_params(input_device, ABS_MT_POSITION_X, 0, SCREEN_MAX_X, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_POSITION_Y, 0, SCREEN_MAX_Y, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_WIDTH_MAJOR, 0, 255, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_TRACKING_ID, 0, 255, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_PRESSURE, 0, 1023, 0, 0);
+	input_set_abs_params(input_device, ABS_MT_TOOL_TYPE, 0, MT_TOOL_MAX, 0, 0);
+	
 	//client->irq = IRQ_PORT;
 	//ts->irq = client->irq;
 
